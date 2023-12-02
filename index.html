@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="https://cdn.jsdelivr.net/npm/remixicon@3.6.0/fonts/remixicon.css" rel="stylesheet">
+    <title>User Management UI</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            background-color: #f0f3f5;
+            margin: 0;
+            padding: 0;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            background-color: rgb(176, 233, 250);
+            overflow-x: auto;
+        }
+
+        th,
+        td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+
+        th {
+            background-color: #f2f2f2;
+        }
+
+        input[type="text"] {
+            width: 4vw;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-width: 1px;
+            border-radius: 10px;
+        }
+
+        .selected-row {
+            background-color: #d3d3d3;
+        }
+
+        .pagination {
+            margin-top: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .action-btn,
+        .nav-btn {
+            text-align: end;
+            padding: 8px;
+            margin-right: 5px;
+            cursor: pointer;
+            border: none;
+            border-radius: 5px;
+            background-color: #007bff;
+            color: #fff;
+        }
+
+        .action-btn:hover,
+        .nav-btn:hover {
+            background-color: #0056b3;
+        }
+
+        .delete-btn {
+            padding: 15px;
+            background-color: #007bff;
+            border-radius: 10px;
+        }
+
+        .delete-btn:hover {
+            background-color: #82b5ed;
+        }
+
+        .edit-btn {
+            background-color: #28a745;
+        }
+
+        .edit-btn:hover {
+            background-color: #218838;
+        }
+
+        .top {
+            margin-top: 4vw;
+            margin-left: 10px;
+            margin-right: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        /* Responsive Styles */
+
+        @media only screen and (max-width: 600px) {
+            table {
+                font-size: 14px;
+            }
+
+            th,
+            td {
+                padding: 6px;
+            }
+
+            .action-btn,
+            .nav-btn {
+                padding: 6px;
+            }
+
+            input[type="text"] {
+                padding: 6px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="top">
+        <input type="text" id="searchInput" placeholder="Search...">
+        <button class="delete-btn" onclick="deleteSelected()">
+            <i class="ri-edit-box-line"></i> Delete Selected
+        </button>
+        <button class="delete-btn" onclick="bulkDelete()">
+            <i class="ri-delete-bin-6-line"></i> Bulk Delete
+        </button>
+    </div>
+    <table>
+        <thead>
+            <tr>
+                <th>Select</th>
+                <th>ID</th>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Role</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody id="userTableBody"></tbody>
+    </table>
+
+    <div class="pagination" id="pagination"></div>
+
+    <script>
+        const rowsPerPage = 10;
+        let currentPage = 1;
+        let selectedRows = [];
+        let users = [];
+
+        function fetchUsers() {
+            fetch('https://geektrust.s3-ap-southeast-1.amazonaws.com/adminui-problem/members.json')
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! Status: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    users = data;
+                    buildTable();
+                    buildPagination();
+                })
+                .catch(error => console.error('Error fetching data:', error));
+        }
+
+        function buildTable() {
+            const tableBody = document.getElementById('userTableBody');
+            tableBody.innerHTML = '';
+
+            const start = (currentPage - 1) * rowsPerPage;
+            const end = start + rowsPerPage;
+
+            for (let i = start; i < Math.min(end, users.length); i++) {
+                const user = users[i];
+                const row = createRow(user);
+                tableBody.appendChild(row);
+            }
+        }
+
+        function createRow(user) {
+            const row = document.createElement('tr');
+            row.setAttribute('data-id', user.id);
+
+            const checkboxCell = document.createElement('td');
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            if (selectedRows.includes(user.id)) {
+                checkbox.checked = true;
+            }
+            checkbox.addEventListener('change', () => toggleSelect(user.id));
+            checkboxCell.appendChild(checkbox);
+            row.appendChild(checkboxCell);
+
+            const cells = ['id', 'name', 'email', 'role'];
+            cells.forEach(prop => {
+                const cell = document.createElement('td');
+                cell.textContent = user[prop];
+                row.appendChild(cell);
+            });
+
+            const actionsCell = document.createElement('td');
+            const editBtn = createButton('Edit', 'edit', () => editRow(user.id));
+            const deleteBtn = createButton('Delete', 'delete', () => deleteRow(user.id));
+            actionsCell.appendChild(editBtn);
+            actionsCell.appendChild(deleteBtn);
+            row.appendChild(actionsCell);
+
+            return row;
+        }
+
+        function createButton(text, className, onClick) {
+            const button = document.createElement('button');
+            button.textContent = text;
+            button.className = `action-btn ${className}`;
+            button.addEventListener('click', onClick);
+            return button;
+        }
+
+        function addNewRow() {
+            const newUser = {
+                id: generateUniqueId(), // You need to implement a function to generate unique IDs
+                name: '',
+                email: '',
+                role: 'member',
+            };
+
+            // Add the new user to the users array
+            users.push(newUser);
+
+            // Rebuild the table and pagination
+            buildTable();
+            buildPagination();
+        }
+
+        // Function to generate a simple unique ID (for example purposes)
+        function generateUniqueId() {
+            return '_' + Math.random().toString(36).substr(2, 9);
+        }
+
+
+        function filterUsers(query) {
+            return users.filter(user => {
+                return Object.values(user).some(value => {
+                    if (typeof value === 'string') {
+                        return value.toLowerCase().includes(query.toLowerCase());
+                    }
+                    return false;
+                });
+            });
+        }
+
+        function handleSearch() {
+            const searchInput = document.getElementById('searchInput');
+            const query = searchInput.value.trim();
+
+            // Filter users based on the search query
+            const filteredUsers = filterUsers(query);
+
+            // Update the users array and rebuild the table and pagination
+            users = filteredUsers;
+            buildTable();
+            buildPagination();
+        }
+
+        // Add an event listener to trigger search on input change
+        document.getElementById('searchInput').addEventListener('input', handleSearch);
+
+
+        function toggleSelect(userId) {
+            const index = selectedRows.indexOf(userId);
+            if (index === -1) {
+                selectedRows.push(userId);
+            } else {
+                console.log("Selected..........")
+                selectedRows.splice(index, 1);
+                console.log("Selected ", index)
+            }
+            buildTable();
+        }
+
+        function editRow(userId) {
+            // Find the user with the given ID
+            const user = users.find(user => user.id === userId);
+
+            if (!user) {
+                console.error('User not found for editing.');
+                return;
+            }
+
+            // Create an editable row
+            const editableRow = createEditableRow(user);
+
+            // Replace the existing row with the editable row in the table
+            const existingRow = document.querySelector(`tr[data-id="${userId}"]`);
+            if (existingRow) {
+                existingRow.parentNode.insertBefore(editableRow, existingRow.nextSibling);
+                existingRow.remove(); // Remove the existing row
+            }
+        }
+
+        function createEditableRow(user) {
+            const editableRow = document.createElement('tr');
+            editableRow.setAttribute('data-id', user.id);
+
+            const cells = ['id', 'name', 'email', 'role'];
+
+            cells.forEach(prop => {
+                const cell = document.createElement('td');
+
+                if (prop === 'role') {
+                    // Create a select input for the 'role' field
+                    const select = document.createElement('select');
+                    const options = ['admin', 'member'];
+
+                    options.forEach(optionValue => {
+                        const option = document.createElement('option');
+                        option.value = optionValue;
+                        option.text = optionValue;
+                        select.appendChild(option);
+                    });
+
+                    select.name = 'role';
+                    select.value = user[prop];
+                    cell.appendChild(select);
+                } else {
+                    // For other properties, display as input field
+                    const input = document.createElement('input');
+                    input.type = 'text';
+                    input.name = prop;
+                    input.value = user[prop];
+                    cell.appendChild(input);
+                }
+
+                editableRow.appendChild(cell);
+            });
+
+            const actionsCell = document.createElement('td');
+            const saveBtn = createButton('Save', 'save', () => saveChanges(user.id));
+            actionsCell.appendChild(saveBtn);
+            editableRow.appendChild(actionsCell);
+            const checkboxCell = document.createElement('td');
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.checked = selectedRows.includes(user.id);
+            checkbox.addEventListener('change', () => toggleSelect(user.id));
+            checkboxCell.appendChild(checkbox);
+            editableRow.appendChild(checkboxCell);
+
+            return editableRow;
+        }
+
+
+
+        function saveChanges(userId) {
+            // Find the editable row and retrieve the updated data
+            const editableRow = document.querySelector(`tr[data-id="${userId}"]`);
+            if (!editableRow) {
+                console.error('Editable row not found for saving changes.');
+                return;
+            }
+
+            const updatedData = {
+                id: userId,
+                name: editableRow.querySelector('input[name="name"]').value,
+                email: editableRow.querySelector('input[name="email"]').value,
+                role: editableRow.querySelector('select[name="role"]').value, // Use 'select' for the role field
+            };
+
+            // Update the user data in the array
+            const index = users.findIndex(user => user.id === userId);
+            if (index !== -1) {
+                users[index] = updatedData;
+                buildTable();
+                buildPagination();
+            }
+        }
+
+
+        function deleteRow(userId) {
+            const confirmed = confirm(`Are you sure you want to delete user with ID ${userId}?`);
+
+            if (confirmed) {
+                // Find the index of the user with the given ID
+                const index = users.findIndex(user => user.id === userId);
+
+                // Remove the user from the array
+                if (index !== -1) {
+                    users.splice(index, 1);
+                    buildTable();
+                    buildPagination();
+                }
+            }
+            console.log('Delete user with ID:', userId);
+        }
+
+        function deleteSelected() {
+            const confirmed = confirm('Are you sure you want to delete the selected rows?');
+            if (confirmed) {
+                // Filter the users array to keep only the unselected rows
+                users = users.filter(user => !selectedRows.includes(user.id));
+                console.log(selectedRows);
+                // Clear the selected rows array
+                selectedRows = [];
+
+                // Rebuild the table and pagination
+                buildTable();
+                buildPagination();
+            }
+        }
+
+
+        function bulkDelete() {
+            if (selectedRows.length === 0) {
+                alert('Please select at least one row to delete.');
+                return;
+            }
+
+            const confirmed = confirm('Are you sure you want to delete all selected rows?');
+
+            if (confirmed) {
+                // Filter the users array to keep only the unselected rows
+                users = users.filter(user => !selectedRows.includes(user.id));
+                console.log(`Deleted in bulk ${selectedRows}`)
+                // Clear the selected rows array
+                selectedRows = [];
+
+                // Rebuild the table and pagination
+                buildTable();
+                buildPagination();
+            }
+        }
+
+        function buildPagination() {
+            const paginationContainer = document.getElementById('pagination');
+            paginationContainer.innerHTML = '';
+
+            const totalPages = Math.ceil(users.length / rowsPerPage);
+            for (let i = 1; i <= totalPages; i++) {
+                const pageBtn = createButton(i, 'nav-btn', () => goToPage(i));
+                paginationContainer.appendChild(pageBtn);
+            }
+
+            const firstPageBtn = createButton('First', 'nav-btn first-page', () => goToPage(1));
+            const prevPageBtn = createButton('Previous', 'nav-btn previous-page', () => goToPage(currentPage - 1));
+            const nextPageBtn = createButton('Next', 'nav-btn next-page', () => goToPage(currentPage + 1));
+            const lastPageBtn = createButton('Last', 'nav-btn last-page', () => goToPage(totalPages));
+
+            paginationContainer.insertBefore(firstPageBtn, paginationContainer.firstChild);
+            paginationContainer.appendChild(prevPageBtn);
+            paginationContainer.appendChild(nextPageBtn);
+            paginationContainer.appendChild(lastPageBtn);
+        }
+
+        function goToPage(page) {
+            currentPage = Math.max(1, Math.min(page, Math.ceil(users.length / rowsPerPage)));
+            buildTable();
+            buildPagination();
+        }
+
+        // Initial setup
+        fetchUsers();
+    </script>
+</body>
+
+</html>
